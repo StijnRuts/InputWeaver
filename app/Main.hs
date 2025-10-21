@@ -6,10 +6,12 @@ import Evdev (EventData (..), KeyEvent (..))
 import qualified Evdev
 import qualified Evdev.Codes as Codes
 import qualified Evdev.Uinput as Uinput
+import qualified Reactive.Banana as B
+import qualified Reactive.Banana.Frameworks as BF
 import System.Environment (getArgs)
 
 main :: IO ()
-main = swapExample
+main = frpExample
 
 readExample :: IO ()
 readExample = do
@@ -86,3 +88,20 @@ virtualDevice =
             Codes.KeyZ
           ]
       }
+
+frpExample :: IO ()
+frpExample = do
+  (addHandler, fire) <- BF.newAddHandler
+  network <- BF.compile $ networkDescription addHandler
+  BF.actuate network
+  fire ()
+  fire ()
+  fire ()
+
+networkDescription :: BF.AddHandler () -> BF.MomentIO ()
+networkDescription addHandler = do
+  eInput <- BF.fromAddHandler addHandler
+  bCount <- B.accumB (0 :: Int) ((+ 1) <$ eInput)
+  eCount <- BF.changes bCount
+  let eIO = fmap print <$> eCount
+  BF.reactimate' eIO
