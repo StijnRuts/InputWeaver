@@ -2,7 +2,7 @@ module Main (main) where
 
 import Control.Monad (forever)
 import qualified Data.ByteString.Char8 as BS
-import Evdev (EventData (..), KeyEvent (..))
+import Evdev (EventData (..))
 import qualified Evdev
 import qualified Evdev.Codes as Codes
 import qualified Evdev.Uinput as Uinput
@@ -11,48 +11,37 @@ import qualified Reactive.Banana.Frameworks as BF
 import System.Environment (getArgs)
 
 main :: IO ()
-main = frpExample
-
-readExample :: IO ()
-readExample = do
+main = do
   args <- getArgs
   case args of
     [devicePath] -> do
       realDev <- Evdev.newDevice $ BS.pack devicePath
+      Evdev.grabDevice realDev
       putStrLn "Opened device:"
       print realDev
+      virtDev <- virtualDevice
+      putStrLn "Swapping A and Z keys"
+      let sendOutput :: Evdev.EventData -> IO ()
+          sendOutput = Uinput.writeEvent virtDev
+      (addHandler, fire) <- BF.newAddHandler
+      network <- BF.compile $ networkDescription addHandler sendOutput
+      BF.actuate network
       forever $ do
-        ev <- Evdev.nextEvent realDev
-        print ev
+        (Evdev.Event eventData _) <- Evdev.nextEvent realDev
+        fire eventData
     _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
 
-writeExample :: IO ()
-writeExample = do
-  virtDev <- virtualDevice
-  putStrLn "Pressing A:"
-  Uinput.writeEvent virtDev $ KeyEvent Codes.KeyA Pressed
-  Uinput.writeEvent virtDev $ SyncEvent Codes.SynReport
-  Uinput.writeEvent virtDev $ KeyEvent Codes.KeyA Released
-  Uinput.writeEvent virtDev $ SyncEvent Codes.SynReport
-  putStrLn "Done"
+networkDescription :: BF.AddHandler Evdev.EventData -> (Evdev.EventData -> IO ()) -> BF.MomentIO ()
+networkDescription addHandler sendOutput = do
+  eInput <- BF.fromAddHandler addHandler
+  let eOutput = swapKey <$> eInput
+  let eIO = sendOutput <$> eOutput
+  BF.reactimate eIO
 
-swapExample :: IO ()
-swapExample = do
-  realDev <- Evdev.newDevice $ BS.pack "/dev/input/by-path/platform-i8042-serio-0-event-kbd"
-  Evdev.grabDevice realDev
-  virtDev <- virtualDevice
-  putStrLn "Swapping A and Z keys"
-  forever $ do
-    (Evdev.Event eventData eventTime) <- Evdev.nextEvent realDev
-    case eventData of
-      (Evdev.KeyEvent code val) -> Uinput.writeEvent virtDev $ KeyEvent (swapKey code) val
-      _ -> Uinput.writeEvent virtDev eventData
-
-swapKey :: Codes.Key -> Codes.Key
-swapKey kc
-  | kc == Codes.KeyA = Codes.KeyZ
-  | kc == Codes.KeyZ = Codes.KeyA
-  | otherwise = kc
+swapKey :: Evdev.EventData -> Evdev.EventData
+swapKey (Evdev.KeyEvent Codes.KeyA status) = Evdev.KeyEvent Codes.KeyZ status
+swapKey (Evdev.KeyEvent Codes.KeyZ status) = Evdev.KeyEvent Codes.KeyA status
+swapKey ev = ev
 
 virtualDevice :: IO Uinput.Device
 virtualDevice =
@@ -88,20 +77,3 @@ virtualDevice =
             Codes.KeyZ
           ]
       }
-
-frpExample :: IO ()
-frpExample = do
-  (addHandler, fire) <- BF.newAddHandler
-  network <- BF.compile $ networkDescription addHandler
-  BF.actuate network
-  fire ()
-  fire ()
-  fire ()
-
-networkDescription :: BF.AddHandler () -> BF.MomentIO ()
-networkDescription addHandler = do
-  eInput <- BF.fromAddHandler addHandler
-  bCount <- B.accumB (0 :: Int) ((+ 1) <$ eInput)
-  eCount <- BF.changes bCount
-  let eIO = fmap print <$> eCount
-  BF.reactimate' eIO
