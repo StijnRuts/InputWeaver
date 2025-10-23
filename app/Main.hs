@@ -1,34 +1,19 @@
 module Main (main) where
 
-import Control.Monad (forever, void)
+import Control.Concurrent (forkIO)
+import Control.Monad (forever)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString.Char8 as BS
 import Evdev (EventData (..))
 import qualified Evdev
 import qualified Evdev.Codes as Codes
 import qualified Evdev.Uinput as Uinput
-import Reflex
-import Reflex.Host.Class
-import Reflex.Host.Headless
+import qualified Reflex as R
+import qualified Reflex.Host.Headless as RHH
 import System.Environment (getArgs)
 
 main :: IO ()
-main = runHeadlessApp $ do
-  (myEvent, myTrigger) <- newTriggerEvent
-
-  let logValue val = putStrLn $ "Event fired: " ++ val
-  _ <- performEvent_ $ liftIO . logValue <$> myEvent
-
-  liftIO $ myTrigger "1"
-  liftIO $ myTrigger "2"
-  liftIO $ myTrigger "3"
-
-  let closeEvent = never
-  return closeEvent
-
-{-
-temp :: IO ()
-temp = do
+main = do
   args <- getArgs
   case args of
     [devicePath] -> do
@@ -39,46 +24,19 @@ temp = do
       virtDev <- virtualDevice
       putStrLn "Swapping A and Z keys"
 
-      runHostFrame $ do
-        (eventTrigger, fireEvent) <- newTriggerEvent
-        let sendOutput :: Evdev.EventData -> IO ()
-            sendOutput = Uinput.writeEvent virtDev . swapKey
-        _ <- performEvent_ $ sendOutput <$> eventTrigger
+      RHH.runHeadlessApp $ do
+        (myEvent, myTrigger) <- R.newTriggerEvent
 
-        forever $ do
+        let sendOutput = Uinput.writeEvent virtDev
+        _ <- R.performEvent_ $ liftIO . sendOutput . swapKey <$> myEvent
+
+        _ <- liftIO $ forkIO $ forever $ do
           (Evdev.Event eventData _) <- Evdev.nextEvent realDev
-          fireEvent eventData
-    _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
--}
-{-
-oldmain :: IO ()
-oldmain = do
-  args <- getArgs
-  case args of
-    [devicePath] -> do
-      realDev <- Evdev.newDevice $ BS.pack devicePath
-      Evdev.grabDevice realDev
-      putStrLn "Opened device:"
-      print realDev
-      virtDev <- virtualDevice
-      putStrLn "Swapping A and Z keys"
-      let sendOutput :: Evdev.EventData -> IO ()
-          sendOutput = Uinput.writeEvent virtDev
-      (addHandler, fire) <- BF.newAddHandler
-      network <- BF.compile $ networkDescription addHandler sendOutput
-      BF.actuate network
-      forever $ do
-        (Evdev.Event eventData _) <- Evdev.nextEvent realDev
-        fire eventData
-    _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
+          myTrigger eventData
 
-networkDescription :: BF.AddHandler Evdev.EventData -> (Evdev.EventData -> IO ()) -> BF.MomentIO ()
-networkDescription addHandler sendOutput = do
-  eInput <- BF.fromAddHandler addHandler
-  let eOutput = swapKey <$> eInput
-  let eIO = sendOutput <$> eOutput
-  BF.reactimate eIO
--}
+        let closeEvent = R.never
+        return closeEvent
+    _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
 
 swapKey :: Evdev.EventData -> Evdev.EventData
 swapKey (Evdev.KeyEvent Codes.KeyA status) = Evdev.KeyEvent Codes.KeyZ status
