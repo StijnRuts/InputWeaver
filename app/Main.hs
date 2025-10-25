@@ -1,6 +1,7 @@
 module Main (main) where
 
-import  Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.Chan
 import Control.Monad (forever)
 import qualified Data.ByteString.Char8 as BS
 import Evdev (EventData (..), KeyEvent (..))
@@ -22,9 +23,15 @@ main = do
       virtDev <- virtualDevice
       putStrLn "Swapping A and Z keys"
 
+      eventChan <- newChan
+      forkIO $ forever $ do
+        ev <- readChan eventChan
+        -- threadDelay (1 * 1000000)
+        Uinput.writeEvent virtDev $ mapKeyCode swapKey $ getEventData ev
+
       forever $ do
         evdevEvent <- Evdev.nextEvent realDev
-        Uinput.writeEvent virtDev $ mapKeyCode swapKey $ getEventData evdevEvent
+        writeChan eventChan evdevEvent
 
     _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
 
