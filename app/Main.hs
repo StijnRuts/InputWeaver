@@ -8,6 +8,7 @@ import Evdev (EventData (..), KeyEvent (..))
 import qualified Evdev
 import qualified Evdev.Codes as Codes
 import qualified Evdev.Uinput as Uinput
+import GHC.Event as E
 import System.Environment (getArgs)
 
 main :: IO ()
@@ -21,17 +22,13 @@ main = do
       print realDev
 
       virtDev <- virtualDevice
+      tm <- E.getSystemTimerManager
       putStrLn "Swapping A and Z keys"
-
-      eventChan <- newChan
-      forkIO $ forever $ do
-        ev <- readChan eventChan
-        -- threadDelay (1 * 1000000)
-        Uinput.writeEvent virtDev $ mapKeyCode swapKey $ getEventData ev
 
       forever $ do
         evdevEvent <- Evdev.nextEvent realDev
-        writeChan eventChan evdevEvent
+        E.registerTimeout tm 5000000 $ do
+          Uinput.writeEvent virtDev $ mapKeyCode swapKey $ getEventData evdevEvent
 
     _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
 
@@ -47,17 +44,6 @@ swapKey kc
   | kc == Codes.KeyA = Codes.KeyZ
   | kc == Codes.KeyZ = Codes.KeyA
   | otherwise = kc
-
-delayExample :: IO ()
-delayExample = do
-  putStrLn "Main thread starts"
-  forkIO $ do
-    threadDelay (5 * 1000000)
-    putStrLn "Delayed IO action executed!"
-  putStrLn "Main thread is free to do other work."
-  forever $ do
-    threadDelay (1 * 1000000)
-    putStrLn "Tick"
 
 virtualDevice :: IO Uinput.Device
 virtualDevice =
