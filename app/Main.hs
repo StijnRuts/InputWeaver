@@ -1,5 +1,6 @@
 module Main (main) where
 
+import  Control.Concurrent (forkIO, threadDelay)
 import Control.Monad (forever)
 import qualified Data.ByteString.Char8 as BS
 import Evdev (EventData (..), KeyEvent (..))
@@ -9,7 +10,7 @@ import qualified Evdev.Uinput as Uinput
 import System.Environment (getArgs)
 
 main :: IO ()
-main = swapExample
+main = delayExample
 
 readExample :: IO ()
 readExample = do
@@ -51,6 +52,17 @@ swapKey kc
   | kc == Codes.KeyA = Codes.KeyZ
   | kc == Codes.KeyZ = Codes.KeyA
   | otherwise = kc
+
+delayExample :: IO ()
+delayExample = do
+  putStrLn "Main thread starts"
+  forkIO $ do
+    threadDelay (5 * 1000000)
+    putStrLn "Delayed IO action executed!"
+  putStrLn "Main thread is free to do other work."
+  forever $ do
+    threadDelay (1 * 1000000)
+    putStrLn "Tick"
 
 virtualDevice :: IO Uinput.Device
 virtualDevice =
