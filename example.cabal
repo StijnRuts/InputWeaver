@@ -1,22 +1,28 @@
-cabal-version:      3.0
-name:               example
-version:            0.1.0
-build-type:         Simple
+cabal-version: 3.0
+name:          example
+version:       0.1.0
+build-type:    Simple
 
 common general
-    build-depends:    base ^>=4.20.2.0
-                    , evdev >=2.3.1 && <2.3.2
-                    , bytestring >=0.12.2 && <0.12.3
-    default-language: Haskell2010
-    ghc-options:      -Wall -threaded
+  build-depends:
+    , base        ^>=4.20.2.0
+    , bytestring  >=0.12.2    && <0.12.3
+    , evdev       >=2.3.1     && <2.3.2
+
+  default-language: Haskell2010
+  ghc-options:
+    -- enable warnings
+    -Wall
+    -- for SystemTimerManager
+    -threaded
 
 executable example
-    import:           general
-    main-is:          Main.hs
-    hs-source-dirs:   app
+  import:         general
+  main-is:        Main.hs
+  hs-source-dirs: app
 
 test-suite example-test
-    import:           general
-    main-is:          Spec.hs
-    hs-source-dirs:   test
-    type:             exitcode-stdio-1.0
+  import:         general
+  main-is:        Spec.hs
+  hs-source-dirs: test
+  type:           exitcode-stdio-1.0
