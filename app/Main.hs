@@ -142,7 +142,7 @@ guest = do
       rendererDrawColor r $= V4 128 128 128 255
       fillRect r Nothing
     True  -> pure $ do
-      rendererDrawColor r $= V4 0 0 0 255
+      rendererDrawColor r $= V4 255 0 0 10
       fillRect r Nothing
 
   ------------------------------------------------------------------------------
@@ -249,13 +249,17 @@ app = do
 main :: IO ()
 main = do
   initializeAll
-  let ogl = defaultOpenGL{ glProfile = Core Debug 3 3 }
+  let ogl = defaultOpenGL{ glProfile = Core Debug 3 3
+                         , glColorPrecision = V4 8 8 8 8
+                         }
       cfg = defaultWindow{ windowGraphicsContext = OpenGLContext ogl
-                         , windowResizable       = True
-                         , windowHighDPI         = False
-                         , windowInitialSize     = V2 640 480
+                         -- , windowMode            = FullscreenDesktop
+                         , windowBorder          = False
+                         , windowPosition        = Centered
+                         , windowResizable       = False
                          }
   window <- createWindow "reflex-sdl2-exe" cfg
+  windowOpacity window $= 0.5
   void $ glCreateContext window
 
   putStrLn "creating renderer..."
