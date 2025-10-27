@@ -7,6 +7,7 @@
 
   packages = [
     pkgs.libevdev
+    pkgs.SDL2
   ];
 
   scripts = {
