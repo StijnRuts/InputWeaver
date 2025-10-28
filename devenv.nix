@@ -1,12 +1,30 @@
-{ pkgs, ... }:
-{
+{pkgs, ...}: {
   languages.haskell = {
     enable = true;
-    package = pkgs.haskell.compiler.ghc9103;
+    package = pkgs.haskell.compiler.ghc963;
   };
 
-  packages = [
-    pkgs.libevdev
+  packages = with pkgs; [
+    glib
+    gobject-introspection
+    gtk3
+    lerc
+    libdatrie
+    libdeflate
+    libepoxy
+    libevdev
+    libselinux
+    libsepol
+    libsysprof-capture
+    libthai
+    libwebp
+    libxkbcommon
+    pcre2
+    util-linux
+    xorg.libXdmcp
+    xorg.libXtst
+    xz
+    zstd
   ];
 
   scripts = {

@@ -1,4 +1,4 @@
-module Main (main) where
+module EvdevExample (main) where
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan
@@ -29,7 +29,6 @@ main = do
         evdevEvent <- Evdev.nextEvent realDev
         E.registerTimeout tm 5000000 $ do
           Uinput.writeEvent virtDev $ mapKeyCode swapKey $ getEventData evdevEvent
-
     _ -> putStrLn "Usage: Provide a device path such as /dev/input/eventX"
 
 getEventData :: Evdev.Event -> Evdev.EventData
