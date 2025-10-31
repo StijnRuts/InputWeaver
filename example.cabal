@@ -8,6 +8,10 @@ common general
     , base
     , bytestring
     , evdev
+    , gi-cairo
+    , gi-cairo-connector
+    , gi-cairo-render
+    , gi-gdk
     , gi-gtk
     , reflex
     , reflex-gi-gtk
