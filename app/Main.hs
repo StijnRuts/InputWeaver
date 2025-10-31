@@ -1,75 +1,117 @@
+{-# LANGUAGE OverloadedStrings, OverloadedLabels #-}
+
 module Main where
 
-import qualified Data.Text as T
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Text as T
-import qualified GI.Cairo.Render as Cairo
-import qualified GI.Cairo.Render.Connector as Cairo
-import qualified GI.Gdk as Gdk
+import Control.Applicative (liftA2)
 import qualified GI.Gtk as Gtk
+import qualified Reflex.GI.Gtk as RGtk
+import Reflex.GI.Gtk (ReactiveAttrOp(..))
+import qualified System.Environment as Env
+import qualified System.Exit as Exit
+import qualified Reflex as R
+import qualified Reflex.Spider.Internal as R
+import Control.Concurrent (forkIO)
+import Control.Monad (forever)
+import Control.Monad.IO.Class (liftIO)
+import qualified Data.ByteString.Char8 as BS
+import Evdev (EventData (..))
+import qualified Evdev
+import qualified Evdev.Codes as Codes
+import qualified Evdev.Uinput as Uinput
 
 main :: IO ()
 main = do
-  _ <- Gtk.init Nothing
+  argv <- (:) <$> Env.getProgName <*> Env.getArgs
 
-  win <- Gtk.windowNew Gtk.WindowTypeToplevel
-  -- win <- Gtk.windowNew Gtk.WindowTypePopup
-  Gtk.windowSetTitle win $ T.pack "Introduction"
+  Just gtkApplication <- Gtk.applicationNew (Just "be.stijnruts.InputWeaver") []
+  
+  realDev <- Evdev.newDevice $ BS.pack "/dev/input/by-id/usb-Dell_Dell_USB_Entry_Keyboard-event-kbd"
+  Evdev.grabDevice realDev
+  putStrLn "Opened device:"
+  print realDev
 
-  -- Gtk.widgetSetAppPaintable win True
+  virtDev <- virtualDevice
+  putStrLn "Swapping A and Z keys"
 
-  Gtk.windowSetDefaultSize win 640 480
-  Gtk.windowSetResizable win False
-  -- Gtk.windowMaximize win
-  -- Gtk.windowFullscreen win
+  rc <- RGtk.runReflexGtk gtkApplication (Just argv) $ do
+    reactiveGtk gtkApplication
+    reactiveEvdev realDev virtDev
 
-  -- Gtk.windowSetDecorated win False
-  -- Gtk.windowSetModal win True
+  case rc of
+    0 -> Exit.exitSuccess
+    n -> Exit.exitWith $ Exit.ExitFailure $ fromIntegral n
 
+reactiveGtk :: R.HasSpiderTimeline t => Gtk.Application -> RGtk.ReflexGtk t ()
+reactiveGtk gtkApplication = do
+  window <- RGtk.runGtk $ Gtk.applicationWindowNew gtkApplication
 
-  -- header <- Gtk.headerBarNew
-  -- Gtk.headerBarSetShowCloseButton header False
-  -- Gtk.headerBarSetTitle header $ Just $ T.pack "My App"
-  -- Gtk.windowSetTitlebar win $ Just header
+  box <- RGtk.runGtk $ Gtk.boxNew Gtk.OrientationVertical 0
+  Gtk.containerAdd window box
 
-  box <- Gtk.boxNew Gtk.OrientationVertical 0
-  Gtk.containerAdd win box
+  input1 <- RGtk.runGtk Gtk.entryNew
+  input2 <- RGtk.runGtk Gtk.entryNew
+  output <- RGtk.runGtk $ Gtk.labelNew Nothing
+  RGtk.runGtk $ Gtk.boxPackStart box input1 False False 0
+  RGtk.runGtk $ Gtk.boxPackStart box input2 False False 0
+  RGtk.runGtk $ Gtk.boxPackStart box output False False 0
 
-  msg <- Gtk.labelNew $ Just $ T.pack "Hello"
-  Gtk.boxPackStart box msg True False 10
+  text1 <- RGtk.dynamicOnSignal "" input1 #changed $ \fire -> Gtk.entryGetText input1 >>= fire
+  text2 <- RGtk.dynamicOnAttribute input2 #text
+  let combinedText = liftA2 (<>) text1 text2
+  RGtk.sink output [#label :== combinedText]
 
-  canvas <- Gtk.drawingAreaNew
-  Gtk.boxPackStart box canvas True True 0
+  _ <- gtkApplication `Gtk.on` #activate $ Gtk.widgetShowAll window
+  pure ()
 
-  btn <- Gtk.buttonNewWithLabel $ T.pack "Click me!"
-  Gtk.boxPackStart box btn False False 10
-  _ <- Gtk.onButtonClicked btn $ Gtk.labelSetLabel msg $ T.pack "Clicked!"
+reactiveEvdev :: R.HasSpiderTimeline t => Evdev.Device -> Uinput.Device -> RGtk.ReflexGtk t ()
+reactiveEvdev realDev virtDev = do
+  (myEvent, myTrigger) <- R.newTriggerEvent
+  delayedEvent <- R.delay 1.0 myEvent
+  _ <- R.performEvent_ $ liftIO . Uinput.writeEvent virtDev . swapKey <$> delayedEvent
 
-  css <- Gtk.cssProviderNew
-  Gtk.cssProviderLoadFromData css $ BS.pack
-    "window { background-color: rgba(0,0,0,0); }"
+  _ <- liftIO $ forkIO $ forever $ do
+    (Evdev.Event eventData _) <- Evdev.nextEvent realDev
+    myTrigger eventData
 
-  screen <- Gdk.screenGetDefault
-  case screen of
-    Just scr -> Gtk.styleContextAddProviderForScreen scr css (fromIntegral Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-    Nothing -> putStrLn "No screen found!"
+  pure ()
 
-  -- winContext <- Gtk.widgetGetStyleContext win
-  -- Gtk.styleContextAddProvider winContext css (fromIntegral Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+swapKey :: Evdev.EventData -> Evdev.EventData
+swapKey (Evdev.KeyEvent Codes.KeyA status) = Evdev.KeyEvent Codes.KeyZ status
+swapKey (Evdev.KeyEvent Codes.KeyZ status) = Evdev.KeyEvent Codes.KeyA status
+swapKey ev = ev
 
+virtualDevice :: IO Uinput.Device
+virtualDevice =
+  Uinput.newDevice
+    (BS.pack "haskell-uinput-example")
+    Uinput.defaultDeviceOpts
+      { Uinput.keys =
+          [ Codes.KeyA,
+            Codes.KeyB,
+            Codes.KeyC,
+            Codes.KeyD,
+            Codes.KeyE,
+            Codes.KeyF,
+            Codes.KeyG,
+            Codes.KeyH,
+            Codes.KeyI,
+            Codes.KeyJ,
+            Codes.KeyK,
+            Codes.KeyL,
+            Codes.KeyM,
+            Codes.KeyN,
+            Codes.KeyO,
+            Codes.KeyP,
+            Codes.KeyQ,
+            Codes.KeyR,
+            Codes.KeyS,
+            Codes.KeyT,
+            Codes.KeyU,
+            Codes.KeyV,
+            Codes.KeyW,
+            Codes.KeyX,
+            Codes.KeyY,
+            Codes.KeyZ
+          ]
+      }
 
-  -- width  <- liftIO $ Gtk.widgetGetAllocatedWidth canvas
-  -- height <- liftIO $ Gtk.widgetGetAllocatedHeight canvas
-
-  -- Gtk.onWidgetDraw canvas $ renderWithContext (drawCanvasHandler canvas)
-  _ <- Gtk.onWidgetDraw canvas $ Cairo.renderWithContext $ do
-    Cairo.setSourceRGB 1 0 0
-    Cairo.arc 200 150 50 0 (2 * pi)
-    Cairo.fill
-    return True
-
-
-  _ <- Gtk.onWidgetDestroy win Gtk.mainQuit
-  Gtk.widgetShowAll win
-
-  Gtk.main
